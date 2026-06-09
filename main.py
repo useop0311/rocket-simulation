@@ -18,7 +18,7 @@ DEFAULT_STAGE_1 = {
     "dry_mass": 10000.0,    # kg (1단 구조체 질량)
     "fuel_mass": 30000.0,   # kg (1단 초기 연료 질량)
     "m_dot": 300.0,        # kg/s (초당 연료 소모율 M_DOT)
-    "v_e": 3000.0,         # m/s (연료 분사 속도 V_E)
+    "v_e": 3500.0,         # m/s (연료 분사 속도 V_E)
     "c_d": 0.6,             # 공기저항 계수 C_D
     "area": 8.0,            # 단면적 AREA (m^2)
 }
@@ -27,7 +27,7 @@ DEFAULT_STAGE_2 = {
     "dry_mass": 5000.0,    # kg
     "fuel_mass": 20000.0,   # kg-연료
     "m_dot": 50.0,         # kg/s
-    "v_e": 5750.0,         # m/s
+    "v_e": 6000.0,         # m/s
     "c_d": 0.4,             # 공기저항
     "area": 5.0,            # 단면적
 }
@@ -98,6 +98,10 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
     vy = 0.0
     thrust = 0.0
     heading = math.pi / 2 # 로켓의 방위각 초기화 (수직)
+    r_current = R_E
+    h_current = 0.0
+    v_current = 0.0
+    v_orbit_req = math.sqrt(GM / R_E)
 
     # 연료 설정
     fuel_1 = s1["fuel_mass"]
@@ -113,9 +117,9 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
     mission_failed = False # 미션 실패(추락) 감지 플래그
     
     # 피치오버(각도 트는거) 설정
-    pitchover_alt = 1500.0
-    pitchover_window = 1000.0
-    target_pitchover_deg = 80.0
+    pitchover_alt = 2000.0 # 피치오버 고도
+    pitchover_window = 1000.0 # 수행하는 고도 기간
+    target_pitchover_deg = 80.0 # 수행하는 각도
     
     history_pts = []
     particles = []
@@ -192,6 +196,10 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
                 elif event.key == pygame.K_r: # r 누르면
                     # 리셋 초기화
                     x, y, vx, vy = 0.0, R_E, 0.0, 0.0
+                    r_current = R_E
+                    h_current = 0.0
+                    v_current = 0.0
+                    v_orbit_req = math.sqrt(GM / R_E)
                     fuel_1 = s1["fuel_mass"]
                     fuel_2 = s2["fuel_mass"]
                     current_time = 0.0
@@ -248,6 +256,10 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
                             elif cb == "reset": # 리셋 버튼이면
                                 # 버튼 상태 변경
                                 x, y, vx, vy = 0.0, R_E, 0.0, 0.0
+                                r_current = R_E
+                                h_current = 0.0
+                                v_current = 0.0
+                                v_orbit_req = math.sqrt(GM / R_E)
                                 fuel_1 = s1["fuel_mass"]
                                 fuel_2 = s2["fuel_mass"]
                                 current_time = 0.0
@@ -290,7 +302,12 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
             ticks = speed_multiplier * 10 # 한번에 계산할 틱 계산하고
             
             for _ in range(ticks): # 한번에 연산할 만큼 정한만큼 연산하기
-       
+                # 실시간 물리 상태 변수 최신화
+                r_current = math.sqrt(x**2 + y**2)
+                h_current = r_current - R_E
+                v_current = math.sqrt(vx**2 + vy**2)
+                v_orbit_req = math.sqrt(GM / r_current)
+        
                 # 비행 방위 계산
                 phi = math.atan2(y, x) # 지구 중심 기준 로켓의 위상각(방위각) 계산
                 horizon_angle = phi - math.pi / 2 # 로켓 위치에서의 수평선 각도 계산
@@ -377,7 +394,7 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
                         v_e = s2["v_e"] # 2단 연료 분사 속도
                         thrust = m_dot * v_e # 2단 엔진 추력 계산
                         
-                        h_target = 160000.0 # 목표 원궤도 진입 고도 (160km)
+                        h_target = 200000.0 # 목표 원궤도 진입 고도 (200km)
                         frac = (h_current - sep_alt) / (h_target - sep_alt) # 2단 점화 후 목표 고도까지 진행률 계산 (0 ~ 1)
                         frac = max(0.0, min(1.0, frac)) # 범위를 0.0 ~ 1.0으로 가둠
                         target_pitch_deg = sep_pitch * (1.0 - frac) # 목표 고도에 가까워질수록 피치각을 서서히 0도(수평)로 조절
@@ -413,6 +430,40 @@ def run_pygame_simulation(stage_1: dict = None, stage_2: dict = None, payload_ma
                 # 상태 갱신
                 x, y, vx, vy = res["x"], res["y"], res["vx"], res["vy"] # 위치 및 속도 최신화
                 current_time += dt # 시뮬레이션 시간 증가
+                
+                # 물리 스텝 이후 정보 갱신
+                r_current = math.sqrt(x**2 + y**2)
+                h_current = r_current - R_E
+                v_current = math.sqrt(vx**2 + vy**2)
+                v_orbit_req = math.sqrt(GM / r_current)
+                
+                # 지표면 추락 검사
+                if h_current <= 0.0 and current_time > 1.0:
+                    mission_failed = True
+                    current_event = "💥 Mission Failed: 로켓이 지표면에 추락하였습니다."
+                    history["events"].append({"time": current_time, "x": x, "y": y, "name": "Crash"})
+                    is_playing = False
+                    break
+                    
+                # 궤도 진입 성공 여부 검사 (근지점 고도 계산을 통한 물리적 안착 판정)
+                if not orbit_achieved:
+                    # 궤도 역학 에너지 및 각운동량 계산
+                    energy = (v_current**2) / 2.0 - GM / r_current
+                    if energy < 0:  # 닫힌 궤도(타원 또는 원)인 경우에만 판정
+                        angular_momentum = x * vy - y * vx
+                        ecc_sq = 1.0 + (2.0 * energy * (angular_momentum**2)) / (GM**2)
+                        ecc = math.sqrt(max(0.0, ecc_sq))
+                        
+                        # 장반경 및 근지점(periapsis) 고도 계산
+                        semi_major = -GM / (2.0 * energy)
+                        r_periapsis = semi_major * (1.0 - ecc)
+                        h_periapsis = r_periapsis - R_E
+                        
+                        # 근지점 고도가 120km 이상이면 대기권 영향이 미미한 안정한 궤도 진입으로 판정
+                        if h_periapsis >= 120000.0:
+                            orbit_achieved = True
+                            current_event = f"🎉 Orbit Achieved: 궤도 안착 성공! (근지점 고도: {h_periapsis/1000:.1f}km)"
+                            history["events"].append({"time": current_time, "x": x, "y": y, "name": "Orbit Achieved"})
                 
                 # Falling Booster Gravity
                 if booster_active: # 떨어지는 부스터가 활성화 상태인 경우
