@@ -156,7 +156,7 @@ def draw_sleek_rocket(surface: pygame.Surface, cx: float, cy: float, heading: fl
     cos_a = math.cos(angle_adj)
     sin_a = math.sin(angle_adj)
     
-    def get_gp(px, py):
+    def get_gp(px, py): # 로켓의 각 구성 요소들의 상대 좌표를 Pygame 화면상의 실제 화면 좌표로 변환
         return (cx + (px * cos_a - py * sin_a), cy + (px * sin_a + py * cos_a))
 
     # 1. 엔진 노즐
@@ -225,7 +225,7 @@ def draw_booster_drop(surface: pygame.Surface, cx: float, cy: float, heading: fl
     cos_a = math.cos(angle_adj)
     sin_a = math.sin(angle_adj)
     
-    def get_gp(px, py):
+    def get_gp(px, py): # 로켓의 각 구성 요소들의 상대 좌표를 Pygame 화면상의 실제 화면 좌표로 변환
         return (cx + (px * cos_a - py * sin_a), cy + (px * sin_a + py * cos_a))
 
     # 1단 엔진 노즐
